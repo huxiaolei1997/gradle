@@ -16,17 +16,18 @@
 
 package org.gradle.integtests
 
+import org.gradle.integtests.fixtures.executer.ExecutionFailure
+import org.gradle.integtests.fixtures.executer.ExecutionResult
+
 class WrapperLoggingIntegrationTest extends AbstractWrapperIntegrationSpec {
 
     def setup() {
         executer.withWelcomeMessageEnabled()
+        file("build.gradle") << "task emptyTask"
     }
 
     def "wrapper only renders welcome message when executed in quiet mode"() {
         given:
-        file("build.gradle") << """
-task emptyTask
-        """
         prepareWrapper()
 
         when:
@@ -42,5 +43,40 @@ task emptyTask
 
         then:
         result.output.empty
+    }
+
+    def "wrapper logs and continues when there is a problem setting permissions"() {
+        given: "malformed distribution"
+        // Repackage distribution with bin/gradle removed so permissions cannot be set
+        def tempUnzipDir = temporaryFolder.createDir("temp-unzip")
+        distribution.binDistribution.unzipTo(tempUnzipDir)
+        distribution.binDistribution.delete()
+        assert tempUnzipDir.file("gradle-${distribution.version.version}", "bin", "gradle").delete()
+        tempUnzipDir.zipTo(distribution.binDistribution)
+        prepareWrapper(distribution.binDistribution.toURI())
+
+        when:
+        ExecutionResult result = wrapperExecuter
+            .withTasks("emptyTask")
+            .run()
+
+        then:
+        result.assertOutputContains("Could not set executable permissions")
+        result.assertOutputContains("Please do this manually if you want to use the Gradle UI.")
+    }
+
+    def "wrapper prints error and fails build if downloaded zip is empty"() {
+        prepareWrapper(distribution.binDistribution.toURI())
+        distribution.binDistribution.text = ""
+
+        when:
+        ExecutionFailure failure = wrapperExecuter
+            .withTasks("emptyTask")
+            .withStackTraceChecksDisabled()
+            .runWithFailure()
+
+        then:
+        failure.assertOutputContains("Could not unzip")
+        failure.assertNotOutput("Could not set executable permissions")
     }
 }
