@@ -37,7 +37,6 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.Dependen
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphVisitor;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.CapabilitiesConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultCapabilitiesConflictHandler;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolutionResult;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolverDetails;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.ModuleConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.PotentialConflict;
@@ -287,8 +286,7 @@ public class DependencyGraphBuilder {
 //            }
 
         resolveState.getDeselectVersionAction().execute(module.getId());
-//            module.softSelect(selected);
-        resolveState.getReplaceSelectionWithConflictResultAction().execute(new DefaultConflictResolutionResult(Collections.singleton(module.getId()), selected));
+        module.softSelect(selected);
         dependency.start(module.getSelected());
 
     }
