@@ -249,14 +249,15 @@ public class DependencyGraphBuilder {
             return;
         }
 
-        final Collection<SelectorState> selectedBy = candidate.getSelectedBy();
-        if (allSelectorsAgreeWith(selectedBy, currentSelection.getVersion(), ALL_SELECTORS)) {
+        if (selectorAgreesWith(selector, currentSelection.getVersion())) {
             // Ignore the candidate, and use the current selection instead.
             dependency.start(currentSelection);
             selector.select(currentSelection);
+            maybeMarkRejected(currentSelection);
             return;
         }
 
+        final Collection<SelectorState> selectedBy = candidate.getSelectedBy();
         if (allSelectorsAgreeWith(module.getSelectors(), candidate.getVersion(), new Predicate<SelectorState>() {
             @Override
             public boolean apply(@Nullable SelectorState input) {
@@ -481,6 +482,17 @@ public class DependencyGraphBuilder {
             }
         }
         return atLeastOneAgrees;
+    }
+
+    private static boolean selectorAgreesWith(SelectorState selectorState, String version) {
+        ResolvedVersionConstraint versionConstraint = selectorState.getVersionConstraint();
+        if (versionConstraint == null || versionConstraint.getPreferredSelector() == null) {
+            return false;
+        }
+        VersionSelector candidateSelector = versionConstraint.getPreferredSelector();
+        return !candidateSelector.requiresMetadata()
+            && candidateSelector.canShortCircuitWhenVersionAlreadyPreselected()
+            && candidateSelector.accept(version);
     }
 
 
