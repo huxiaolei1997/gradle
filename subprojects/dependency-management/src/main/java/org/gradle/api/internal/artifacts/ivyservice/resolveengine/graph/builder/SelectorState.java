@@ -59,6 +59,7 @@ class SelectorState implements DependencyGraphSelector {
     private ComponentSelectionReasonInternal failureSelectionReason;
     private ModuleResolveState targetModule;
     ComponentState selected;
+    EdgeState firstEdge;
 
     SelectorState(Long id, DependencyState dependencyState, DependencyToComponentIdResolver resolver, ResolveState resolveState, ModuleIdentifier targetModuleId) {
         this.id = id;

@@ -32,16 +32,20 @@ import org.gradle.api.internal.artifacts.ResolvedVersionConstraint;
 import org.gradle.api.internal.artifacts.dsl.ModuleReplacementsData;
 import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionApplicator;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.ConflictResolverDetails;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.ModuleExclusions;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphSelector;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphVisitor;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.CapabilitiesConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultCapabilitiesConflictHandler;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolutionResult;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.ModuleConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.PotentialConflict;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.RejectCheckingConflictResolverDetails;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.specs.Spec;
+import org.gradle.internal.UncheckedException;
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.id.IdGenerator;
@@ -232,7 +236,38 @@ public class DependencyGraphBuilder {
         selector.select(candidate);
 
         ModuleResolveState module = selector.getTargetModule();
-        if (tryCompatibleSelection(resolveState, candidate, module)) {
+
+        ComponentState currentSelection = module.getSelected();
+        if (currentSelection != null) {
+            if (tryCompatibleSelection(resolveState, candidate, module)) {
+                return;
+            }
+
+            if (candidate == currentSelection) {
+                // Nothing to do
+                return;
+            }
+
+            List<ComponentState> candidates = ImmutableList.of(currentSelection, candidate);
+            ConflictResolverDetails<ComponentState> details = new RejectCheckingConflictResolverDetails<ComponentState>(candidates);
+            moduleConflictHandler.getResolver().select(details);
+            if (details.hasFailure()) {
+                throw UncheckedException.throwAsUncheckedException(details.getFailure());
+            }
+
+            ComponentState selected = details.getSelected();
+
+//            if (selected == currentSelection) {
+//                // Nothing to do
+//                return;
+//            }
+
+            resolveState.getDeselectVersionAction().execute(module.getId());
+//            module.softSelect(selected);
+            resolveState.getReplaceSelectionWithConflictResultAction().execute(new DefaultConflictResolutionResult(Collections.singleton(module.getId()), selected));
+            dependency.start(module.getSelected());
+
+            // This module has already been registered for conflict resolution
             return;
         }
 

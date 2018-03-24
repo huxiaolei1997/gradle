@@ -46,6 +46,11 @@ public class DefaultConflictHandler implements ModuleConflictHandler {
         this.compositeResolver.addFirst(conflictResolver);
     }
 
+    @Override
+    public ModuleConflictResolver getResolver() {
+        return compositeResolver;
+    }
+
     /**
      * Registers new newModule and returns an instance of a conflict if conflict exists.
      */

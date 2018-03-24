@@ -22,7 +22,7 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.ComponentResol
 
 import java.util.Collection;
 
-class DefaultConflictResolutionResult implements ConflictResolutionResult {
+public class DefaultConflictResolutionResult implements ConflictResolutionResult {
     private final Collection<? extends ModuleIdentifier> participatingModules;
     private final ComponentResolutionState selected;
 
