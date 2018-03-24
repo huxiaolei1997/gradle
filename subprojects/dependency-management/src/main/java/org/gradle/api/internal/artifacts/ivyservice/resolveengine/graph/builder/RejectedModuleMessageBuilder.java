@@ -56,8 +56,7 @@ public class RejectedModuleMessageBuilder {
                 }
             }
 
-            List<String> paths = pathTo(incomingEdge);
-            for (String path : paths) {
+            for (String path : pathTo(incomingEdge)) {
                 sb.append("   ").append(path);
                 sb.append(" ").append(renderVersionConstraint(selector.getVersionConstraint()));
                 renderReason(sb, selector);
@@ -69,14 +68,14 @@ public class RejectedModuleMessageBuilder {
     }
 
     private Collection<EdgeState> getIncomingEdges(ModuleResolveState module) {
-        List<EdgeState> incoming = Lists.newArrayList();
+        Set<EdgeState> incoming = Sets.newLinkedHashSet();
         for (NodeState nodeState : module.getSelected().getNodes()) {
             incoming.addAll(nodeState.getIncomingEdges());
         }
         return incoming;
     }
 
-    private static List<String> pathTo(EdgeState edge) {
+    private static Collection<String> pathTo(EdgeState edge) {
         List<List<EdgeState>> acc = Lists.newArrayListWithExpectedSize(1);
         pathTo(edge, Lists.<EdgeState>newArrayList(), acc, Sets.<NodeState>newHashSet());
         List<String> result = Lists.newArrayListWithCapacity(acc.size());
