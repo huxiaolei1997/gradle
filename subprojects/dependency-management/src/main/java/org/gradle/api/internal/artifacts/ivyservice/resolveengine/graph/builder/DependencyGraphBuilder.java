@@ -232,6 +232,8 @@ public class DependencyGraphBuilder {
         }
 
         ComponentState candidate = resolveState.getRevision(idResolveResult.getId(), idResolveResult.getModuleVersionId(), idResolveResult.getMetadata());
+
+        // TODO:DAZ Move this later, after we've actually chosen a target
         dependency.start(candidate);
         selector.select(candidate);
 
@@ -239,12 +241,12 @@ public class DependencyGraphBuilder {
 
         ComponentState currentSelection = module.getSelected();
         if (currentSelection != null) {
-            if (tryCompatibleSelection(resolveState, candidate, module)) {
+            if (candidate == currentSelection) {
+                // Nothing to do
                 return;
             }
 
-            if (candidate == currentSelection) {
-                // Nothing to do
+            if (tryCompatibleSelection(resolveState, candidate, selector, module)) {
                 return;
             }
 
@@ -311,6 +313,7 @@ public class DependencyGraphBuilder {
 
     private static boolean tryCompatibleSelection(final ResolveState resolveState,
                                                   final ComponentState candidate,
+                                                  final SelectorState candidateSelector,
                                                   final ModuleResolveState module) {
         final ModuleIdentifier moduleId = module.getId();
         final ComponentState currentlySelected = module.getSelected();
@@ -327,6 +330,7 @@ public class DependencyGraphBuilder {
         if (currentlySelected != null && currentlySelected != candidate) {
             if (allSelectorsAgreeWith(selectedBy, currentlySelected.getVersion(), ALL_SELECTORS)) {
                 // if this selector agrees with the already selected version, don't bother and pick it
+                candidateSelector.select(currentlySelected);
                 return true;
             }
 
