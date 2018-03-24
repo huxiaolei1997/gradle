@@ -39,9 +39,9 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.Dependen
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.CapabilitiesConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultCapabilitiesConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolutionResult;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictResolverDetails;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.ModuleConflictHandler;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.PotentialConflict;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.RejectCheckingConflictResolverDetails;
 import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.specs.Spec;
@@ -249,13 +249,15 @@ public class DependencyGraphBuilder {
             }
 
             List<ComponentState> candidates = ImmutableList.of(currentSelection, candidate);
-            ConflictResolverDetails<ComponentState> details = new RejectCheckingConflictResolverDetails<ComponentState>(candidates);
+            ConflictResolverDetails<ComponentState> details = new DefaultConflictResolverDetails<ComponentState>(candidates);
             moduleConflictHandler.getResolver().select(details);
             if (details.hasFailure()) {
                 throw UncheckedException.throwAsUncheckedException(details.getFailure());
             }
 
             ComponentState selected = details.getSelected();
+
+            maybeMarkRejected(selected);
 
 //            if (selected == currentSelection) {
 //                // Nothing to do
@@ -288,6 +290,21 @@ public class DependencyGraphBuilder {
                 // This will propagate through the graph and prune configurations that are no longer required
                 // For each module participating in the conflict (many times there is only one participating module that has multiple versions)
                 c.withParticipatingModules(resolveState.getDeselectVersionAction());
+            }
+        }
+    }
+
+    private void maybeMarkRejected(ComponentState selected) {
+        if (selected.isRejected()) {
+            return;
+        }
+
+        String version = selected.getVersion();
+        ModuleResolveState moduleResolveState = selected.getModule();
+        for (SelectorState selector : moduleResolveState.getSelectors()) {
+            if (selector.getVersionConstraint() != null && selector.getVersionConstraint().getRejectedSelector() != null && selector.getVersionConstraint().getRejectedSelector().accept(version)) {
+                selected.reject();
+                return;
             }
         }
     }
