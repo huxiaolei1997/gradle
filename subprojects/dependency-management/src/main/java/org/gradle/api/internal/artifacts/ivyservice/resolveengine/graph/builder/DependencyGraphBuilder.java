@@ -234,39 +234,53 @@ public class DependencyGraphBuilder {
         ModuleResolveState module = selector.getTargetModule();
         ComponentState currentSelection = module.getSelected();
 
+        // TODO:DAZ Should not need to do this if the current selection ends up being chosen. But some of the logic to 'choose best' requires it.
         dependency.start(candidate);
-        // TODO:DAZ We should not need to do this for a candidate that is later replaced by something better
         selector.select(candidate);
 
+        // Three possibilities:
+        // 1. No current selection: just use the candidate.
+        //    This is the first time we've seen the module, so register with conflict resolver.
         if (currentSelection == null) {
             registerModuleForConflictResolution(resolveState, candidate, module);
             return;
         }
 
-        if (candidate == currentSelection) {
-            // Nothing to do: we've already selected it.
-            return;
-        }
-
-        if (selectorAgreesWith(selector, currentSelection.getVersion())) {
-            // Ignore the candidate, and use the current selection instead.
+        ComponentState selected = chooseBest(module, selector, currentSelection, candidate);
+        // 2. Current selection is still the best choice, considering the new selector. Just add another selector pointing to it.
+        //       Check if it's now rejected, since we have a new selector.
+        if (selected == currentSelection) {
             dependency.start(currentSelection);
             selector.select(currentSelection);
+            // TODO:DAZ It's wasteful to recheck all of the existing selectors, only need to check the new one.
             maybeMarkRejected(currentSelection);
             return;
         }
 
-        final Collection<SelectorState> selectedBy = candidate.getSelectedBy();
+        // 3. New candidate is a preferred choice over current selection. Need to reset the module state and reselect.
+        maybeMarkRejected(candidate);
+
+        // Perform a 'soft-select' of the candidate, replacing the current selection
+        resolveState.getDeselectVersionAction().execute(module.getId());
+        module.softSelect(candidate);
+    }
+
+    private ComponentState chooseBest(ModuleResolveState module, SelectorState selector, ComponentState currentSelection, final ComponentState candidate) {
+        if (currentSelection == candidate) {
+            return candidate;
+        }
+
+        if (selectorAgreesWith(selector, currentSelection.getVersion())) {
+            return currentSelection;
+        }
+
         if (allSelectorsAgreeWith(module.getSelectors(), candidate.getVersion(), new Predicate<SelectorState>() {
             @Override
             public boolean apply(@Nullable SelectorState input) {
-                return !selectedBy.contains(input);
+                return !candidate.getSelectedBy().contains(input);
             }
         })) {
-            // Perform a 'soft-select' of the candidate, replacing the current selection
-            resolveState.getDeselectVersionAction().execute(module.getId());
-            module.softSelect(candidate);
-            return;
+            return candidate;
         }
 
         List<ComponentState> candidates = ImmutableList.of(currentSelection, candidate);
@@ -275,22 +289,9 @@ public class DependencyGraphBuilder {
         if (details.hasFailure()) {
             throw UncheckedException.throwAsUncheckedException(details.getFailure());
         }
-
-        ComponentState selected = details.getSelected();
-
-        maybeMarkRejected(selected);
-
-//            if (selected == currentSelection) {
-//                // Nothing to do
-//                return;
-//            }
-
-        resolveState.getDeselectVersionAction().execute(module.getId());
-        module.softSelect(selected);
-        dependency.start(module.getSelected());
-
+        return details.getSelected();
     }
-
+    
     private void registerModuleForConflictResolution(ResolveState resolveState, ComponentState candidate, ModuleResolveState module) {
         // A new module. Check for conflict with capabilities and module replacements.
         PotentialConflict c = moduleConflictHandler.registerCandidate(module);
