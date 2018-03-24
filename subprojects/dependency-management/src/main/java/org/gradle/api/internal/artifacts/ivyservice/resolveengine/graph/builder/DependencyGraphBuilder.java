@@ -22,7 +22,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
-import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.capabilities.Capability;
@@ -233,66 +232,80 @@ public class DependencyGraphBuilder {
 
         ComponentState candidate = resolveState.getRevision(idResolveResult.getId(), idResolveResult.getModuleVersionId(), idResolveResult.getMetadata());
 
-        // TODO:DAZ Move this later, after we've actually chosen a target
+        ModuleResolveState module = selector.getTargetModule();
+        ComponentState currentSelection = module.getSelected();
+
         dependency.start(candidate);
+        // TODO:DAZ We should not need to do this for a candidate that is later replaced by something better
         selector.select(candidate);
 
-        ModuleResolveState module = selector.getTargetModule();
+        if (currentSelection == null) {
+            registerModuleForConflictResolution(resolveState, candidate, module);
+            return;
+        }
 
-        ComponentState currentSelection = module.getSelected();
-        if (currentSelection != null) {
-            if (candidate == currentSelection) {
-                // Nothing to do
-                return;
+        if (candidate == currentSelection) {
+            // Nothing to do: we've already selected it.
+            return;
+        }
+
+        final Collection<SelectorState> selectedBy = candidate.getSelectedBy();
+        if (allSelectorsAgreeWith(selectedBy, currentSelection.getVersion(), ALL_SELECTORS)) {
+            // Ignore the candidate, and use the current selection instead.
+            dependency.start(currentSelection);
+            selector.select(currentSelection);
+            return;
+        }
+
+        if (allSelectorsAgreeWith(module.getSelectors(), candidate.getVersion(), new Predicate<SelectorState>() {
+            @Override
+            public boolean apply(@Nullable SelectorState input) {
+                return !selectedBy.contains(input);
             }
+        })) {
+            // Perform a 'soft-select' of the candidate, replacing the current selection
+            resolveState.getDeselectVersionAction().execute(module.getId());
+            module.softSelect(candidate);
+            return;
+        }
 
-            if (tryCompatibleSelection(resolveState, candidate, selector, module)) {
-                return;
-            }
+        List<ComponentState> candidates = ImmutableList.of(currentSelection, candidate);
+        ConflictResolverDetails<ComponentState> details = new DefaultConflictResolverDetails<ComponentState>(candidates);
+        moduleConflictHandler.getResolver().select(details);
+        if (details.hasFailure()) {
+            throw UncheckedException.throwAsUncheckedException(details.getFailure());
+        }
 
-            List<ComponentState> candidates = ImmutableList.of(currentSelection, candidate);
-            ConflictResolverDetails<ComponentState> details = new DefaultConflictResolverDetails<ComponentState>(candidates);
-            moduleConflictHandler.getResolver().select(details);
-            if (details.hasFailure()) {
-                throw UncheckedException.throwAsUncheckedException(details.getFailure());
-            }
+        ComponentState selected = details.getSelected();
 
-            ComponentState selected = details.getSelected();
-
-            maybeMarkRejected(selected);
+        maybeMarkRejected(selected);
 
 //            if (selected == currentSelection) {
 //                // Nothing to do
 //                return;
 //            }
 
-            resolveState.getDeselectVersionAction().execute(module.getId());
+        resolveState.getDeselectVersionAction().execute(module.getId());
 //            module.softSelect(selected);
-            resolveState.getReplaceSelectionWithConflictResultAction().execute(new DefaultConflictResolutionResult(Collections.singleton(module.getId()), selected));
-            dependency.start(module.getSelected());
+        resolveState.getReplaceSelectionWithConflictResultAction().execute(new DefaultConflictResolutionResult(Collections.singleton(module.getId()), selected));
+        dependency.start(module.getSelected());
 
-            // This module has already been registered for conflict resolution
-            return;
-        }
+    }
 
-        // Check for a new conflict
-        if (candidate.isSelectable()) {
+    private void registerModuleForConflictResolution(ResolveState resolveState, ComponentState candidate, ModuleResolveState module) {
+        // A new module. Check for conflict with capabilities and module replacements.
+        PotentialConflict c = moduleConflictHandler.registerCandidate(module);
+        if (!c.conflictExists()) {
+            // No conflict. Select it for now
+            LOGGER.debug("Selecting new module {}", module.getId());
+            module.select(candidate);
+        } else {
+            // We have a conflict
+            LOGGER.debug("Found new conflicting module {}", module);
 
-            // A new module revision. Check for conflict
-            PotentialConflict c = moduleConflictHandler.registerCandidate(module);
-            if (!c.conflictExists()) {
-                // No conflict. Select it for now
-                LOGGER.debug("Selecting new module version {}", candidate);
-                module.select(candidate);
-            } else {
-                // We have a conflict
-                LOGGER.debug("Found new conflicting module version {}", candidate);
-
-                // Deselect the currently selected version, and remove all outgoing edges from the version
-                // This will propagate through the graph and prune configurations that are no longer required
-                // For each module participating in the conflict (many times there is only one participating module that has multiple versions)
-                c.withParticipatingModules(resolveState.getDeselectVersionAction());
-            }
+            // For each module participating in the conflict, deselect the currently selection, and remove all outgoing edges from the version.
+            // This will propagate through the graph and prune configurations that are no longer required.
+            c.withParticipatingModules(resolveState.getDeselectVersionAction());
         }
     }
 
@@ -309,44 +322,6 @@ public class DependencyGraphBuilder {
                 return;
             }
         }
-    }
-
-    private static boolean tryCompatibleSelection(final ResolveState resolveState,
-                                                  final ComponentState candidate,
-                                                  final SelectorState candidateSelector,
-                                                  final ModuleResolveState module) {
-        final ModuleIdentifier moduleId = module.getId();
-        final ComponentState currentlySelected = module.getSelected();
-        String version = candidate.getId().getVersion();
-        List<SelectorState> moduleSelectors = module.getSelectors();
-        if (currentlySelected == null && !resolveState.getModuleReplacementsData().participatesInReplacements(moduleId)) {
-            if (allSelectorsAgreeWith(moduleSelectors, version, ALL_SELECTORS)) {
-                module.select(candidate);
-                return true;
-            }
-        }
-
-        final Collection<SelectorState> selectedBy = candidate.getSelectedBy();
-        if (currentlySelected != null && currentlySelected != candidate) {
-            if (allSelectorsAgreeWith(selectedBy, currentlySelected.getVersion(), ALL_SELECTORS)) {
-                // if this selector agrees with the already selected version, don't bother and pick it
-                candidateSelector.select(currentlySelected);
-                return true;
-            }
-
-            if (allSelectorsAgreeWith(moduleSelectors, version, new Predicate<SelectorState>() {
-                @Override
-                public boolean apply(@Nullable SelectorState input) {
-                    return !selectedBy.contains(input);
-                }
-            })) {
-                resolveState.getDeselectVersionAction().execute(moduleId);
-                module.softSelect(candidate);
-                return true;
-            }
-        }
-        // we're going to fallback to conflict resolution
-        return false;
     }
 
     /**
