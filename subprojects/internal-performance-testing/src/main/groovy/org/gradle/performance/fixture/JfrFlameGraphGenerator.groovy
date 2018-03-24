@@ -98,7 +98,7 @@ class JfrFlameGraphGenerator {
                 (~'.*BuildOperation.*'): 'build operations',
                 (~'.*\\.(execute|run|proceed|doBuild|configureBuild)\\(.*'): 'execution infrastructure',
                 (~'.*(PluginManager|ObjectConfigurationAction|PluginTarget|PluginAware|Script.apply|ScriptPlugin|ScriptTarget|ScriptRunner).*'): 'plugin management',
-                (~'.*(DynamicObject|Closure.call|MetaClass|MetaMethod|CallSite|ConfigureDelegate|Method.invoke|MethodAccessor|Proxy|ConfigureUtil|Script.invoke|ClosureBackedAction).*'): 'dynamic invocation',
+                (~'.*(DynamicObject|Closure.call|MetaClass|MetaMethod|CallSite|ConfigureDelegate|Method.invoke|MethodAccessor|Proxy|ConfigureUtil|Script.invoke|ClosureBackedAction|getProperty).*'): 'dynamic invocation',
                 (~'.*(ProjectEvaluator|Project.evaluate).*'): 'project evaluation',
             ))
         )
