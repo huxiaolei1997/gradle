@@ -102,10 +102,7 @@ class ModuleResolveState implements CandidateModule {
             version.evict();
         }
 
-        // TODO:DAZ Should never have to check this
-        if (selected.getRejectionReason() == null) {
-            selected.select();
-        }
+        selected.select();
     }
 
     public ComponentState clearSelection() {
