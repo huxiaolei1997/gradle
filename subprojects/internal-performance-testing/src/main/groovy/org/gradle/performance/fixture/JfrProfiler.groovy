@@ -60,7 +60,7 @@ class JfrProfiler extends Profiler {
         def jfrFile = getJfrFile(spec)
         jfrFile.parentFile.mkdirs()
         if (!useDaemon(spec)) {
-            flightRecordOptions += ",defaultrecording=true,dumponexit=true,dumponexitpath=${jfrFile},settings=$config"
+            flightRecordOptions += ",defaultrecording=true,dumponexit=true,dumponexitpath=${jfrFile},settings=profile"
         }
         ["-XX:+UnlockCommercialFeatures", "-XX:+FlightRecorder", "-XX:FlightRecorderOptions=$flightRecordOptions", "-XX:+UnlockDiagnosticVMOptions", "-XX:+DebugNonSafepoints"] as List<String>
     }
@@ -78,7 +78,7 @@ class JfrProfiler extends Profiler {
 
     void start(BuildExperimentSpec spec) {
         if (useDaemon(spec)) {
-            jCmd.execute(pid.pid, "JFR.start", "name=profile", "settings=$config")
+            jCmd.execute(pid.pid, "JFR.start", "name=profile", "settings=profile")
         }
     }
 
