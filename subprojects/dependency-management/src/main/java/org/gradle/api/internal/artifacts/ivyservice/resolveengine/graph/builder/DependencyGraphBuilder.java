@@ -260,9 +260,9 @@ public class DependencyGraphBuilder {
         // 3. New candidate is a preferred choice over current selection. Need to reset the module state and reselect.
         maybeMarkRejected(candidate);
 
-        // Perform a 'soft-select' of the candidate, replacing the current selection
+        // Replacing the current selection for the module
         resolveState.getDeselectVersionAction().execute(module.getId());
-        module.softSelect(candidate);
+        module.restart(selected);
     }
 
     private ComponentState chooseBest(ModuleResolveState module, SelectorState selector, ComponentState currentSelection, final ComponentState candidate) {
@@ -291,7 +291,7 @@ public class DependencyGraphBuilder {
         }
         return details.getSelected();
     }
-    
+
     private void registerModuleForConflictResolution(ResolveState resolveState, ComponentState candidate, ModuleResolveState module) {
         // A new module. Check for conflict with capabilities and module replacements.
         PotentialConflict c = moduleConflictHandler.registerCandidate(module);
